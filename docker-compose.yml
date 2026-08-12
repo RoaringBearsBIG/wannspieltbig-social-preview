@@ -1,0 +1,15 @@
+services:
+  social-preview:
+    build: .
+    container_name: wannspieltbig-social-preview
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8080"
+    networks:
+      - dashboard-network
+
+networks:
+  dashboard-network:
+    name: dashboard-network
+    external: true
