@@ -451,6 +451,10 @@ h1{text-align:center;font-size:20px;margin:8px 0 16px;color:#fff}
 .btn-copy:active{background:#444}
 .btn-copy.copied{background:#2a6b3a}
 .btn-row svg{flex-shrink:0}
+.footer{text-align:center;margin:24px 0 8px;font-size:13px;color:#888}
+.footer a{color:#6c9bcf;text-decoration:none}
+.footer a:hover{text-decoration:underline}
+.footer .sep{color:#555}
 </style>
 </head>
 <body>
@@ -458,6 +462,15 @@ h1{text-align:center;font-size:20px;margin:8px 0 16px;color:#fff}
 <div class="cards">
 <!-- CARDS -->
 </div>
+<footer class="footer">
+<a href="https://roaringbears.de" target="_blank" rel="noopener">roaringbears.de</a>
+<span class="sep">·</span>
+<a href="https://discord.gg/roaringbears" target="_blank" rel="noopener">Discord</a>
+<span class="sep">·</span>
+<a href="https://wannspieltbig.de" target="_blank" rel="noopener">wannspieltbig.de</a>
+<span class="sep">·</span>
+<a href="https://github.com/RoaringBearsBIG/wannspieltbig-social-preview" target="_blank" rel="noopener">GitHub</a>
+</footer>
 <script>
 (function(){
 // WhatsApp button — open wa.me with the URL pre-filled
