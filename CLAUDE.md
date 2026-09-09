@@ -15,7 +15,8 @@ hierher.
 ```
 main.py          # Entrypoint: aiohttp-Server + Background-Image-Warmer
 app.py           # create_app(): alle Routen (kanonisch + Legacy)
-share_pages.py   # Handler, HTML-Builder, Match-API-Fetch, Logo-Fetch, Image-Cache
+share_pages.py   # Handler, HTML-Builder, Match-API-Fetch (TTL-gecached),
+                 #   Logo-Fetch, Image-Cache
 image.py         # Reine Bild-Komposition (PIL, kein Netz) — MUSS gespiegelt
                  #   werden mit RoaringBots core/versus_image.py!
 config.py        # Env-Config (SHARE_BASE_URL, ESPORTS_API_URL, PORT, …)
@@ -41,6 +42,12 @@ cachen die Previews.
 
 - **Datenquelle**: ausschließlich `wannspieltbig.de/api/match_upcoming/`
   (extern, kein Postgres, kein Discord). `ESPORTS_API_URL` konfigurierbar.
+- **Match-API-Cache**: die Roh-API-Daten werden 30 s in-memory gecached
+  (`_match_data_cache`, `MATCH_DATA_TTL_SECONDS`). Ohne diesen Cache macht
+  jede Request (Match-Seite + Bild) einen frischen ~300 ms-Roundtrip zur
+  externen API — genau der Burst, den ein Social-Crawler beim Posten eines
+  Links auslöst. Fehlgeschlagene Fetches werden nie gecacht (Live-Retry beim
+  nächsten Zugriff).
 - **Image-Cache**: in-memory, keyed `(variant, slug)`, Signature enthält
   kickoff/tournament/logo/heutiges Datum (Today/Tomorrow-Label über
   Mitternacht korrekt). Bound 80 Einträge.
@@ -83,3 +90,10 @@ docker compose up -d --build
 - nginx-Umleitung liegt in `~/website` (anderer Komponenten-Scope, eigene
   Session): nur die Zeile `set $share_upstream …` in
   `nginx/nginx.conf` zeigt auf diesen Container.
+- **nginx-Proxy-Cache**: `nginx/nginx.conf` (in `~/website`) cached alle
+  `bot.wannspieltbig.de`-Responses via `proxy_cache share_cache`
+  (`X-Proxy-Cache`-Header). Wiederholte Crawls (WhatsApp/X/…) werden von
+  nginx bedient, ohne den Python-Service zu berühren. Deployment des
+  nginx-Containers: `docker compose up -d --build nginx` in `~/website`.
+  Requests mit Cache-Buster-Query (`?v=…`) sind neue Cache-Keys und laufen
+  immer am Cache vorbei — nicht als Workaround verwenden.

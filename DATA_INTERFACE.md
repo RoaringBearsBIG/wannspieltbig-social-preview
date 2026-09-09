@@ -27,9 +27,9 @@ Contract für den Share-Page-Service (2026-08 aus RoaringBot extrahiert).
 ## Datenquelle
 
 - `wannspieltbig.de/api/match_upcoming/?limit=20` (Env `ESPORTS_API_URL`)
-  — frischer Fetch pro Request, nicht-cancellte Matches, aufsteigend nach
-  Kickoff. TBA-Placeholder wenn kein Gegner-Logo. Logo-Fetch direkt, dann
-  images.weserv.nl-Proxy.
+  — 30 s TTL-gecached (`_match_data_cache`), nicht-cancellte Matches,
+  aufsteigend nach Kickoff. TBA-Placeholder wenn kein Gegner-Logo. Logo-Fetch
+  direkt, dann images.weserv.nl-Proxy.
 
 ## Umgebungsvariablen
 

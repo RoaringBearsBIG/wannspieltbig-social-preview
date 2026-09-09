@@ -57,6 +57,19 @@ docker compose up -d --build
 The container listens on port 8080 **inside the `dashboard-network` docker
 network** (no published port) — nginx proxies `bot.wannspieltbig.de` to it.
 
+## Caching
+
+- **Match-API data** — the external `match_upcoming/` response is cached
+  in-memory for 30 s (`_match_data_cache`), so the burst of requests a social
+  crawler makes when a link is shared doesn't hit the external API each time.
+- **Versus images** — built JPEGs are cached in-memory keyed by
+  `(variant, slug)` with a content signature; a background warmer pre-builds
+  both variants for upcoming matches.
+- **nginx proxy cache** — `nginx/nginx.conf` in the
+  [`website`](https://github.com/spa1teN/website) repo caches
+  `bot.wannspieltbig.de` responses (`X-Proxy-Cache` header), so repeat crawls
+  never reach the Python service.
+
 ## Documentation
 
 - **[DATA_INTERFACE.md](DATA_INTERFACE.md)** — route contract for consumers (nginx, social crawlers, RoaringBot mirror)

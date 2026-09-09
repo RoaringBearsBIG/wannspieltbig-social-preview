@@ -19,6 +19,7 @@ import io
 import json
 import logging
 import re
+import time
 import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional
@@ -42,6 +43,29 @@ API_PAGE_SIZE = 20
 VARIANTS = ("og", "twitter")
 
 _session: Optional[ClientSession] = None
+
+# Match-list API data, cached per URL with a short TTL. Every request
+# (match page + image) used to do a fresh round-trip to the external
+# wannspieltbig API (~300 ms). The data barely changes between crawls, so
+# caching removes that latency for the whole burst of fetches a social
+# crawler makes when a link is shared. A cold entry is never stored, so a
+# transient API failure still falls back to a live retry next time.
+_match_data_cache: dict[str, tuple[float, dict]] = {}
+MATCH_DATA_TTL_SECONDS = 30
+
+
+def _get_match_data(url: str) -> dict:
+    """Return cached match-list API data for url, or None if stale/absent."""
+    now = time.monotonic()
+    cached = _match_data_cache.get(url)
+    if cached and now - cached[0] < MATCH_DATA_TTL_SECONDS:
+        return cached[1]
+    return None
+
+
+def _cache_match_data(url: str, data: dict) -> None:
+    """Store fetched match-list data for url with a fresh timestamp."""
+    _match_data_cache[url] = (time.monotonic(), data)
 
 
 def _http_session() -> ClientSession:
@@ -163,7 +187,11 @@ handle_share_next_match = handle_share_list
 async def _fetch_matches(upcoming_only: bool) -> list:
     """Fetch non-cancelled matches from wannspieltbig, sorted by kickoff."""
     url = config.esports_api_url.rstrip("/") + f"/?limit={API_PAGE_SIZE}"
-    data = await _get_json(url)
+    data = _get_match_data(url)
+    if data is None:
+        data = await _get_json(url)
+        if data:
+            _cache_match_data(url, data)
     if not data:
         return []
 
