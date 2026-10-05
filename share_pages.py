@@ -36,7 +36,14 @@ log = logging.getLogger("social-preview.share")
 
 BERLIN_TZ = ZoneInfo("Europe/Berlin")
 GAME_LABELS = {"cs": "CS", "lol": "LoL", "tm": "TM"}
-API_PAGE_SIZE = 20
+# The match API caps a page at `limit` and exposes `next`; request the max page
+# size and follow `next` so matches beyond the first page still resolve (their
+# share page / image used to 404 because only page 1 was ever read).
+API_PAGE_SIZE = 100
+MAX_API_PAGES = 5
+# A match is still worth showing up to this long after kickoff (covers live
+# matches). `has_ended` alone is unreliable — see _is_current.
+LIVE_GRACE = timedelta(hours=6)
 
 # Image variants: "og" is the full composition for WhatsApp/Bluesky/Discord,
 # "twitter" strips the game logo and BO/date/time (tournament stays).
@@ -117,7 +124,11 @@ async def handle_share_list(request: web.Request) -> web.Response:
             for variant in VARIANTS:
                 asyncio.create_task(_warm_image(m, variant))
     cards = "\n".join(_build_card(m) for m in matches)
-    html = _LIST_HTML.replace("<!-- CARDS -->", cards)
+    html = (
+        _LIST_HTML
+        .replace("<!-- OG -->", _list_meta_tags(matches))
+        .replace("<!-- CARDS -->", cards)
+    )
     return web.Response(text=html, content_type="text/html")
 
 
@@ -184,8 +195,13 @@ handle_share_next_match = handle_share_list
 # ── Data ────────────────────────────────────────────────────────────────────
 
 
-async def _fetch_matches(upcoming_only: bool) -> list:
-    """Fetch non-cancelled matches from wannspieltbig, sorted by kickoff."""
+async def _fetch_api_results() -> list:
+    """All match results from the API, following pagination.
+
+    The endpoint returns a `next` link once a page is full; reading only the
+    first page meant any match beyond it 404'd on its share page and image even
+    though it was still upcoming (the dashboard's thumbnail probe and social
+    crawlers saw the 404s)."""
     url = config.esports_api_url.rstrip("/") + f"/?limit={API_PAGE_SIZE}"
     data = _get_match_data(url)
     if data is None:
@@ -195,9 +211,46 @@ async def _fetch_matches(upcoming_only: bool) -> list:
     if not data:
         return []
 
-    matches = [m for m in data.get("results", []) if not m.get("cancelled")]
+    results = list(data.get("results", []))
+    next_url = data.get("next")
+    for _ in range(MAX_API_PAGES - 1):
+        if not next_url:
+            break
+        page = _get_match_data(next_url)
+        if page is None:
+            page = await _get_json(next_url)
+            if page:
+                _cache_match_data(next_url, page)
+        if not page:
+            break
+        results.extend(page.get("results", []))
+        next_url = page.get("next")
+    return results
+
+
+def _is_current(m: dict, now: datetime) -> bool:
+    """Whether a match still belongs in the overview.
+
+    `has_ended` alone is unreliable — the API keeps returning long-finished
+    matches with `has_ended=0` (Sep-2026: a Sep-27 FNCS match stayed listed for
+    over a week). A kickoff-time grace is the real guard: anything older than
+    LIVE_GRACE has certainly finished and is dropped."""
+    if m.get("cancelled") or m.get("has_ended"):
+        return False
+    kickoff, _ = _parse_match_time(m.get("first_map_at", ""))
+    if kickoff is None:
+        return False
+    return kickoff >= now - LIVE_GRACE
+
+
+async def _fetch_matches(upcoming_only: bool) -> list:
+    """Fetch non-cancelled matches from wannspieltbig, sorted by kickoff."""
+    results = await _fetch_api_results()
+    now = datetime.now(BERLIN_TZ)
     if upcoming_only:
-        matches = [m for m in matches if not m.get("has_ended")]
+        matches = [m for m in results if _is_current(m, now)]
+    else:
+        matches = [m for m in results if not m.get("cancelled")]
     matches.sort(
         key=lambda m: _parse_match_time(m.get("first_map_at", ""))[0]
         or datetime.max.replace(tzinfo=BERLIN_TZ)
@@ -310,6 +363,40 @@ def _build_card(m: dict) -> str:
 </div>"""
 
 
+def _list_meta_tags(matches: list) -> str:
+    """og:/twitter: tags for the overview page.
+
+    RoaringBot's "Send WhatsApp Reminder" button shares the bare root URL, and
+    without an og:image WhatsApp falls back to no — or an inconsistent —
+    thumbnail. Point the preview at the next upcoming match's versus image so
+    a shared root link always has a picture."""
+    if not matches:
+        return ""
+    m = matches[0]
+    title, bo_line, _tournament, time_str, _ = _match_info(m)
+    og_title = "BIG Matches"
+    og_desc = f"Next: {title} · {time_str} · {bo_line}"
+    og_image = _image_url(m["id"])
+    twitter_image = _twitter_image_url(m["id"])
+    share_url = config.share_base_url.rstrip("/") + "/"
+    return (
+        f'<meta property="og:title" content="{_esc(og_title)}">\n'
+        f'<meta property="og:description" content="{_esc(og_desc)}">\n'
+        f'<meta property="og:type" content="website">\n'
+        f'<meta property="og:url" content="{_esc(share_url)}">\n'
+        f'<meta property="og:image" content="{_esc(og_image)}">\n'
+        f'<meta property="og:image:secure_url" content="{_esc(og_image)}">\n'
+        f'<meta property="og:image:type" content="image/jpeg">\n'
+        f'<meta property="og:image:width" content="1600">\n'
+        f'<meta property="og:image:height" content="800">\n'
+        f'<meta property="og:image:alt" content="{_esc(title)}">\n'
+        f'<meta name="twitter:card" content="summary_large_image">\n'
+        f'<meta name="twitter:title" content="{_esc(og_title)}">\n'
+        f'<meta name="twitter:description" content="{_esc(og_desc)}">\n'
+        f'<meta name="twitter:image" content="{_esc(twitter_image)}">\n'
+    )
+
+
 def _match_page_html(m: dict) -> str:
     """Match page: og: tags (WhatsApp/Bluesky/Discord preview), twitter:image
     (X preview, stripped variant) + redirect to wannspieltbig."""
@@ -330,9 +417,14 @@ def _match_page_html(m: dict) -> str:
 <meta property="og:type" content="website">
 <meta property="og:url" content="{_esc(share_url)}">
 <meta property="og:image" content="{_esc(og_image)}">
+<meta property="og:image:secure_url" content="{_esc(og_image)}">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1600">
 <meta property="og:image:height" content="800">
+<meta property="og:image:alt" content="{_esc(title)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{_esc(og_title)}">
+<meta name="twitter:description" content="{_esc(tournament)}">
 <meta name="twitter:image" content="{_esc(twitter_image)}">
 <script>location.replace({json.dumps(match_url)});</script>
 </head>
@@ -463,6 +555,7 @@ _LIST_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BIG Matches</title>
+<!-- OG -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f0f0f;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh;padding:16px}

@@ -31,7 +31,7 @@ cachen die Previews.
 
 | Route | Zweck |
 |---|---|
-| `/` | Übersicht: eine Card pro anstehendem Match, WhatsApp/Copy-Buttons |
+| `/` | Übersicht: eine Card pro anstehendem Match, WhatsApp/Copy-Buttons; og:/twitter:-Tags (og:image = nächstes Match) |
 | `/{id}` | Match-Seite: og:-Tags + twitter:image, dann JS-Redirect zu wannspieltbig |
 | `/{id}/image.jpg` | og:image (WhatsApp/Bluesky/Discord) — volle Komposition, 2:1 |
 | `/{id}/image-twitter.jpg` | twitter:image (X) — ohne Game-Logo, ohne BO/Datum/Zeit (Turnier bleibt) |
@@ -42,6 +42,19 @@ cachen die Previews.
 
 - **Datenquelle**: ausschließlich `wannspieltbig.de/api/match_upcoming/`
   (extern, kein Postgres, kein Discord). `ESPORTS_API_URL` konfigurierbar.
+- **Paginierung**: die API deckelt eine Seite auf `limit` und liefert `next`.
+  Es werden bis zu `MAX_API_PAGES` Seiten à `API_PAGE_SIZE` (100) geladen —
+  früher nur die erste, wodurch Matches jenseits der ersten Seite auf ihrer
+  Share-Seite und ihrem Bild 404 lieferten (fehlendes Thumbnail bei bereits
+  geteilten Links, sichtbar als `Googlebot-Image`/`Bytespider`-404er im Log).
+- **Nur aktuelle Matches**: die Übersicht filtert zusätzlich zu
+  `cancelled`/`has_ended` zeitbasiert — Kickoff älter als `LIVE_GRACE` (6 h)
+  fliegt raus. `has_ended` allein ist unzuverlässig (die API lieferte ein
+  beendetes Sep-27-FNCS-Match über eine Woche mit `has_ended=0`).
+- **og:-Tags auf `/`**: die Übersicht trägt og:/twitter:-Tags (og:image =
+  Versus-Bild des nächsten Matches). RoaringBots WhatsApp-Button teilt die
+  nackte Root-URL; ohne og:image hatte WhatsApp kein — bzw. ein
+  inkonsistentes — Thumbnail.
 - **Match-API-Cache**: die Roh-API-Daten werden 30 s in-memory gecached
   (`_match_data_cache`, `MATCH_DATA_TTL_SECONDS`). Ohne diesen Cache macht
   jede Request (Match-Seite + Bild) einen frischen ~300 ms-Roundtrip zur

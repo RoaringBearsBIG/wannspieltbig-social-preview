@@ -69,6 +69,6 @@ After deploy: wait ~20 s, run the smoke test.
 | Symptom | Fix |
 |---|---|
 | 502 from public URL | Check `docker logs website-nginx-1`; container must be running and on `dashboard-network`: `docker inspect wannspieltbig-social-preview -f '{{json .NetworkSettings.Networks}}'` |
-| 404 on `/{id}` but match exists | Match may be >20 API pages deep or ended; probe `wannspieltbig.de/api/match_upcoming/?limit=20` directly |
+| 404 on `/{id}` but match exists | The service follows API pagination (`limit=100` + `next`), so a 404 now means the match really isn't in `wannspieltbig.de/api/match_upcoming/` (left the API or cancelled); probe it directly to confirm |
 | image.jpg 500 | `docker logs wannspieltbig-social-preview` — logo fetch failed AND TBA placeholder missing? resources/ must be in the image |
 | ZoneInfoNotFoundError | Install `tzdata` in the Dockerfile and rebuild |

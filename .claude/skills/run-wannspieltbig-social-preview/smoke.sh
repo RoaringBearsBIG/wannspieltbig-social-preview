@@ -30,6 +30,14 @@ else
     fail "GET / renders match cards (upstream match API down?)"
 fi
 
+# 3b. List page carries an og:image — RoaringBot's WhatsApp button shares the
+# bare root URL, which needs a preview image.
+if echo "$LIST_HTML" | grep -q 'og:image'; then
+    pass "GET / carries og:image"
+else
+    fail "GET / carries og:image"
+fi
+
 # 4. Per-match probes (needs at least one match in the list)
 MID=$(echo "$LIST_HTML" | grep -oE '/[0-9]+/image\.jpg' | head -1 | grep -oE '[0-9]+' || true)
 if [ -z "$MID" ]; then

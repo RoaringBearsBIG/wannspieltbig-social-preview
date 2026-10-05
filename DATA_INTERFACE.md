@@ -16,8 +16,8 @@ Contract für den Share-Page-Service (2026-08 aus RoaringBot extrahiert).
 | Route | Antwort |
 |---|---|
 | `GET /healthz` | 200 `ok` (intern, Docker-HEALTHCHECK) |
-| `GET /` | HTML-Übersicht: eine Card pro anstehendem Match, WhatsApp/Copy-Buttons |
-| `GET /{id}` | HTML mit `og:title/description/type/url/image` (+width/height 1600×800), `twitter:card summary_large_image`, `twitter:image`, dann JS-Redirect auf `html_detail_url` der wannspieltbig-API. Funktioniert auch für beendete Matches. |
+| `GET /` | HTML-Übersicht: eine Card pro aktuellem Match (nicht gecancelt, nicht beendet, Kickoff ≤ `LIVE_GRACE` alt), WhatsApp/Copy-Buttons. Trägt og:/twitter:-Tags mit og:image = Versus-Bild des nächsten Matches (RoaringBots WhatsApp-Button teilt die Root-URL). |
+| `GET /{id}` | HTML mit `og:title/description/type/url/image` (+`og:image:secure_url/type/alt`, width/height 1600×800), `twitter:card summary_large_image`, `twitter:title/description/image`, dann JS-Redirect auf `html_detail_url` der wannspieltbig-API. Funktioniert auch für beendete Matches. |
 | `GET /{id}/image.jpg` | Versus-JPEG 1600×800 (2:1), Quality 85, `Cache-Control: public, max-age=3600` — volle Komposition |
 | `GET /{id}/image-twitter.jpg` | Dito, aber ohne Game-Logo und ohne BO/Datum/Zeit (Turnier-Label bleibt) |
 | `GET /share/…` (Legacy) | Identische Handler wie kanonische URLs — **müssen bedient bleiben**, bestehende WhatsApp-Caches |
@@ -26,9 +26,13 @@ Contract für den Share-Page-Service (2026-08 aus RoaringBot extrahiert).
 
 ## Datenquelle
 
-- `wannspieltbig.de/api/match_upcoming/?limit=20` (Env `ESPORTS_API_URL`)
+- `wannspieltbig.de/api/match_upcoming/?limit=100` (Env `ESPORTS_API_URL`)
   — 30 s TTL-gecached (`_match_data_cache`), nicht-cancellte Matches,
-  aufsteigend nach Kickoff. TBA-Placeholder wenn kein Gegner-Logo. Logo-Fetch
+  aufsteigend nach Kickoff. Die API liefert bei vollem Page-Limit ein `next`;
+  der Service folgt bis `MAX_API_PAGES`, damit auch Matches jenseits der ersten
+  Seite auflösen (sonst 404 auf Share-Seite/Bild). Die Übersicht zeigt nur
+  aktuelle Matches (Kickoff ≤ 6 h her, `LIVE_GRACE`); beendete Matches bleiben
+  über `/{id}` erreichbar. TBA-Placeholder wenn kein Gegner-Logo. Logo-Fetch
   direkt, dann images.weserv.nl-Proxy.
 
 ## Umgebungsvariablen
