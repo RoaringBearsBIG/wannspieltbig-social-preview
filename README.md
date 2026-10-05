@@ -25,9 +25,9 @@
 
 Match data is powered by **[wannspieltbig](https://github.com/ckarrie/ckw-csgo)**,
 the [ckarrie](https://github.com/ckarrie)-maintained Django fan page for the
-BIG CLAN. This service reads its public match API, composes versus thumbnails,
-and serves small HTML pages whose `og:`/`twitter:` meta tags drive the social
-link previews.
+BIG CLAN. This service reads its public match API (following the API's
+pagination), composes versus thumbnails, and serves small HTML pages whose
+`og:`/`twitter:` meta tags drive the social link previews.
 
 Extracted from [RoaringBot](https://github.com/RoaringBearsBIG/RoaringBot) in
 2026-08 — RoaringBot keeps only the pure image composition
@@ -38,8 +38,8 @@ Extracted from [RoaringBot](https://github.com/RoaringBearsBIG/RoaringBot) in
 
 | Route | Purpose |
 |---|---|
-| `/` | Overview: one card per upcoming match with WhatsApp/Copy buttons |
-| `/{id}` | Match page: `og:` tags + `twitter:image`, then JS redirect to the wannspieltbig match page |
+| `/` | Overview: one card per current match with WhatsApp/Copy buttons, plus `og:`/`twitter:` tags (`og:image` = next match's versus image — RoaringBot's WhatsApp button shares this root URL) |
+| `/{id}` | Match page: `og:`/`twitter:` tags (incl. `og:image:secure_url/type/alt`, `twitter:title/description`), then JS redirect to the wannspieltbig match page |
 | `/{id}/image.jpg` | `og:image` (WhatsApp/Bluesky/Discord) — full composition, 2:1 |
 | `/{id}/image-twitter.jpg` | `twitter:image` (X) — without game logo and BO/date/time (tournament stays) |
 | `/share/*`, `/share-match/` | Legacy paths — must keep working (already-shared WhatsApp messages cache the previews) |
